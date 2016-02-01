@@ -28,33 +28,33 @@ import java.nio.charset.StandardCharsets;
 
 
 public class AutoPhrasingQParserPlugin extends QParserPlugin implements ResourceLoaderAware {
-	
+
   private static final Logger Log = LoggerFactory.getLogger( AutoPhrasingQParserPlugin.class );
   private CharArraySet phraseSets;
   private String phraseSetFiles;
-  
+
   private String parserImpl = "lucene";
-  
+
   private char replaceWhitespaceWith = 'x';  // preserves stemming
-  
+
   private boolean ignoreCase = true;
-	
+
   @Override
   public void init( NamedList initArgs ) {
     Log.info( "init ..." );
     SolrParams params = SolrParams.toSolrParams(initArgs);
     phraseSetFiles = params.get( "phrases" );
-	
+
     String pImpl = params.get( "defType" );
     if (pImpl != null) {
       parserImpl = pImpl;
     }
-    
+
     String replaceWith = params.get( "replaceWhitespaceWith" );
     if (replaceWith != null && replaceWith.length() > 0) {
       replaceWhitespaceWith = replaceWith.charAt(0);
     }
-    
+
     String ignoreCaseSt = params.get( "ignoreCase" );
     if (ignoreCaseSt != null && ignoreCaseSt.equalsIgnoreCase( "false" )) {
       ignoreCase = false;
@@ -73,44 +73,45 @@ public class AutoPhrasingQParserPlugin extends QParserPlugin implements Resource
                         .createParser(modQ, localParams, modparams, req);
   }
 
-  private String filter( String qStr ) {	
+  private String filter( String qStr ) {
     // 1) collapse " :" to ":" to protect field names
     // 2) expand ":" to ": " to free terms from field names
     // 3) expand "+" to "+ " to free terms from "+" operator
     // 4) expand "-" to "- " to free terms from "-" operator
 	// 5) Autophrase with whitespace tokenizer
 	// 6) collapse "+ " and "- " to "+" and "-" to glom operators.
-		
+
     String query = qStr;
     while( query.contains( " :" ))
       query = query.replaceAll( "\\s:", ": " );
 
     query = query.replaceAll( "\\+", "+ " );
     query = query.replaceAll( "\\-", "- " );
-    
+
     if (ignoreCase) {
       query = query.replaceAll( "AND", "&&" );
       query = query.replaceAll( "OR", "||" );
     }
-        
+
     try {
       query = autophrase( query );
     }
     catch (IOException ioe ) {  }
-        
+
     query = query.replaceAll( "\\+ ", "+" );
     query = query.replaceAll( "\\- ", "-" );
-    
+
     if (ignoreCase) {
       query = query.replaceAll( "&&", "AND" );
       query = query.replaceAll( "\\|\\|", "OR" );
     }
-		
+
     return query;
   }
-	
+
   private String autophrase( String input ) throws IOException {
-    WhitespaceTokenizer wt = new WhitespaceTokenizer(  new StringReader( input ));
+    WhitespaceTokenizer wt = new WhitespaceTokenizer();
+    wt.setReader(new StringReader(input));
     TokenStream ts = wt;
     if (ignoreCase) {
       ts = new LowerCaseFilter( wt );
@@ -119,12 +120,12 @@ public class AutoPhrasingQParserPlugin extends QParserPlugin implements Resource
     aptf.setReplaceWhitespaceWith( new Character( replaceWhitespaceWith ) );
     CharTermAttribute term = aptf.addAttribute(CharTermAttribute.class);
     aptf.reset();
-        
+
     StringBuffer strbuf = new StringBuffer( );
     while( aptf.incrementToken( )) {
       strbuf.append( term.toString( ) ).append( " " );
     }
-        
+
     return strbuf.toString();
   }
 
@@ -134,7 +135,7 @@ public class AutoPhrasingQParserPlugin extends QParserPlugin implements Resource
       phraseSets = getWordSet(loader, phraseSetFiles, true );
     }
   }
-	
+
   private CharArraySet getWordSet( ResourceLoader loader,
 		                           String wordFiles, boolean ignoreCase)
 		                           throws IOException {
@@ -151,7 +152,7 @@ public class AutoPhrasingQParserPlugin extends QParserPlugin implements Resource
     }
     return words;
   }
-	
+
   private List<String> getLines(ResourceLoader loader, String resource) throws IOException {
 	return WordlistLoader.getLines(loader.openResource(resource), StandardCharsets.UTF_8);
   }
